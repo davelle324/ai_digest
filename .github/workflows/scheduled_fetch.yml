@@ -1,0 +1,15 @@
+name: Fetch AI News
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger fetch
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/admin/fetch \
+            -H "X-Admin-Key: ${{ secrets.ADMIN_SECRET }}" \
+            --fail

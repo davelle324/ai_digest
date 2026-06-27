@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: ai-digest-api
+    runtime: python
+    rootDir: apps/api
+    buildCommand: pip install uv && uv sync
+    startCommand: uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUMMARIZER_ENABLED
+        value: "false"
+      - key: SITE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      - key: ADMIN_SECRET
+        generateValue: true

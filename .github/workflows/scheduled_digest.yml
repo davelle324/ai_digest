@@ -1,0 +1,24 @@
+name: Send Digests
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send daily digest
+        run: |
+          curl -X POST ${{ secrets.API_URL }}/admin/digest/daily \
+            -H "X-Admin-Key: ${{ secrets.ADMIN_SECRET }}" \
+            --fail
+
+      - name: Send weekly digest (Mondays only)
+        run: |
+          DAY=$(date +%u)
+          if [ "$DAY" = "1" ]; then
+            curl -X POST ${{ secrets.API_URL }}/admin/digest/weekly \
+              -H "X-Admin-Key: ${{ secrets.ADMIN_SECRET }}" \
+              --fail
+          fi

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /home/davelle/projects/ai_digest/apps/api/app)",
+      "Bash(mkdir -p /home/davelle/projects/ai_digest/apps/api/alembic)",
+      "Bash(mkdir -p /home/davelle/projects/ai_digest/apps/web/app/article/\\\\[id\\\\])",
+      "Bash(mkdir -p /home/davelle/projects/ai_digest/apps/web/app/subscribe)",
+      "Bash(mkdir -p /home/davelle/projects/ai_digest/apps/web/components)",
+      "Bash(uv --version)",
+      "Bash(uv run *)",
+      "Bash(pip show *)",
+      "Bash(ruff --version)",
+      "Bash(uv tool *)",
+      "Bash(grep -E '\\\\.env$|\\\\.env\\\\.')",
+      "Bash(grep -rn \"re_[a-zA-Z0-9_]{20,}\\\\|sk-[a-zA-Z0-9]{20,}\\\\|password\\\\s*=\\\\s*['\\\\\"][^'\\\\\"]\\\\+\" /home/davelle/projects/ai_digest/ --include=\"*.py\" --include=\"*.yml\" --include=\"*.json\" --include=\"*.env\")"
+    ]
+  }
+}

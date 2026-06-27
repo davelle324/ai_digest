@@ -1,0 +1,53 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Alembic
+apps/api/alembic/versions/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+apps/web/.next/
+apps/web/out/
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Ollama models (pulled at runtime)
+ollama_data/
