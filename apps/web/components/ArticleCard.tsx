@@ -18,10 +18,20 @@ function formatDate(dateStr: string | null): string {
   }
 }
 
-function truncate(text: string | null, maxLength: number): string {
+function stripHtml(text: string | null): string {
   if (!text) return ''
-  if (text.length <= maxLength) return text
-  return text.slice(0, maxLength).trimEnd() + '…'
+  return text
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function truncate(text: string | null, maxLength: number): string {
+  const clean = stripHtml(text)
+  if (!clean) return ''
+  if (clean.length <= maxLength) return clean
+  return clean.slice(0, maxLength).trimEnd() + '…'
 }
 
 export default function ArticleCard({ article }: ArticleCardProps) {

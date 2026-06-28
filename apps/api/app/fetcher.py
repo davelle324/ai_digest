@@ -1,6 +1,8 @@
 import asyncio
+import html
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 
 import feedparser
 import httpx
@@ -40,6 +42,13 @@ def _contains_ai_keywords(text: str) -> bool:
     return any(kw in text_lower for kw in AI_ML_KEYWORDS)
 
 
+def _strip_html(text: str) -> str:
+    text = html.unescape(text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
 def _parse_feed(url: str):
     return feedparser.parse(url)
 
@@ -63,7 +72,7 @@ async def fetch_rss(source: Source, db: Session) -> int:
             content_list = getattr(entry, "content", [])
             if content_list:
                 raw_content = content_list[0].get("value", "")
-        excerpt = raw_content[:500] if raw_content else None
+        excerpt = _strip_html(raw_content)[:500] if raw_content else None
 
         # Parse published date
         published_at: datetime | None = None
@@ -87,7 +96,7 @@ async def fetch_rss(source: Source, db: Session) -> int:
         except IntegrityError:
             db.rollback()  # Duplicate URL — silently skip
 
-    source.last_fetched_at = datetime.utcnow()
+    source.last_fetched_at = datetime.now(timezone.utc)
     db.commit()
     logger.info("RSS %s: added %d new articles", source.name, count)
     return count
@@ -141,7 +150,7 @@ async def fetch_hackernews(source: Source, db: Session) -> int:
         published_at: datetime | None = None
         if item.get("time"):
             try:
-                published_at = datetime.utcfromtimestamp(item["time"])
+                published_at = datetime.fromtimestamp(item["time"], tz=timezone.utc)
             except Exception:
                 pass
 
@@ -160,7 +169,7 @@ async def fetch_hackernews(source: Source, db: Session) -> int:
         except IntegrityError:
             db.rollback()  # Duplicate URL — silently skip
 
-    source.last_fetched_at = datetime.utcnow()
+    source.last_fetched_at = datetime.now(timezone.utc)
     db.commit()
     logger.info("HackerNews AI: added %d new articles", count)
     return count

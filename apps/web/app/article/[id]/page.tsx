@@ -7,6 +7,15 @@ interface ArticlePageProps {
   params: { id: string }
 }
 
+function stripHtml(text: string | null): string {
+  if (!text) return ''
+  return text
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return ''
   try {
@@ -32,7 +41,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   }
 
   const displayDate = formatDate(article.published_at || article.fetched_at)
-  const content = article.summary || article.excerpt
+  const content = stripHtml(article.summary || article.excerpt)
 
   return (
     <div className="min-h-screen flex flex-col">

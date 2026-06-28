@@ -2,7 +2,7 @@ import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
 
 import resend
@@ -196,7 +196,7 @@ async def unsubscribe(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Invalid token")
     if subscriber.unsubscribed_at is not None:
         return {"message": "Already unsubscribed"}
-    subscriber.unsubscribed_at = datetime.utcnow()
+    subscriber.unsubscribed_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Successfully unsubscribed"}
 

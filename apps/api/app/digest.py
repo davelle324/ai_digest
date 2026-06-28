@@ -1,7 +1,7 @@
 import html
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import resend
 from sqlalchemy.orm import Session
@@ -139,7 +139,7 @@ async def send_digest(subscriber: Subscriber, articles: list[Article], db: Sessi
 
 async def run_daily_digest(db: Session) -> None:
     """Send daily digest to all eligible subscribers."""
-    cutoff = datetime.utcnow() - timedelta(hours=24)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     articles = (
         db.query(Article)
         .filter(Article.fetched_at >= cutoff)
@@ -170,7 +170,7 @@ async def run_daily_digest(db: Session) -> None:
 
 async def run_weekly_digest(db: Session) -> None:
     """Send weekly digest to all eligible subscribers."""
-    cutoff = datetime.utcnow() - timedelta(days=7)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
     articles = (
         db.query(Article)
         .filter(Article.fetched_at >= cutoff)

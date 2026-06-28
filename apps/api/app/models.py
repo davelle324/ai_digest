@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -33,7 +33,7 @@ class Article(Base):
     excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     source: Mapped["Source"] = relationship("Source", back_populates="articles")
 
@@ -49,7 +49,7 @@ class Subscriber(Base):
     cadence: Mapped[str] = mapped_column(String(10), nullable=False)  # 'daily' or 'weekly'
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     confirmation_token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    subscribed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    subscribed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     unsubscribed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     digest_logs: Mapped[list["DigestLog"]] = relationship("DigestLog", back_populates="subscriber")
@@ -63,7 +63,7 @@ class DigestLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     subscriber_id: Mapped[int] = mapped_column(Integer, ForeignKey("subscribers.id"), nullable=False)
-    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     article_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(10), nullable=False)  # 'sent' or 'failed'
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

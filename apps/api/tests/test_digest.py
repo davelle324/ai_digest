@@ -1,5 +1,5 @@
 """Digest and email tests — no real emails are sent."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -26,7 +26,7 @@ def _article(db, source, title="AI News", url="https://test.com/1", with_summary
         url=url,
         excerpt="Short excerpt.",
         summary="Full AI summary." if with_summary else None,
-        fetched_at=datetime.utcnow() - timedelta(hours=age_hours),
+        fetched_at=datetime.now(timezone.utc) - timedelta(hours=age_hours),
     )
     db.add(a)
     db.commit()
@@ -237,7 +237,7 @@ async def test_run_daily_digest_skips_unsubscribed(db):
     src = _source(db)
     _article(db, src)
     sub = _subscriber(db, token="tok-unsub")
-    sub.unsubscribed_at = datetime.utcnow()
+    sub.unsubscribed_at = datetime.now(timezone.utc)
     db.commit()
 
     with patch("app.digest.resend.Emails.send") as mock_send:

@@ -227,10 +227,10 @@ def test_admin_fetch_wrong_key(client):
 
 
 def test_admin_fetch_authorized(client):
-    with patch("app.main.fetch_all_sources", new_callable=AsyncMock, return_value=3):
+    with patch("app.main._fetch_in_background", new_callable=AsyncMock):
         resp = client.post("/admin/fetch", headers={"X-Admin-Key": "test-admin-secret"})
     assert resp.status_code == 200
-    assert resp.json()["new_articles"] == 3
+    assert resp.json()["status"] == "started"
 
 
 def test_admin_summarize_no_auth(client):
