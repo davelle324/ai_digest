@@ -51,6 +51,12 @@ if [ ! -f .env ]; then
   exit 0
 fi
 
+# Export all .env vars so child processes (Next.js, uvicorn) can read them
+set -a
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/.env"
+set +a
+
 # ── Ollama model ─────────────────────────────────────────────────────────────
 if $OLLAMA_AVAILABLE; then
   OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
