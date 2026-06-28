@@ -13,6 +13,7 @@ class Source(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     url: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'rss' or 'hackernews'
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

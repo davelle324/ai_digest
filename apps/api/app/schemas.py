@@ -11,6 +11,7 @@ class SourceOut(BaseModel):
     name: str
     url: str
     source_type: str
+    category: str | None
     enabled: bool
 
 

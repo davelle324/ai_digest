@@ -51,12 +51,15 @@ if [ ! -f .env ]; then
   exit 0
 fi
 
-mkdir -p data
-
 # ── Ollama model ─────────────────────────────────────────────────────────────
 if $OLLAMA_AVAILABLE; then
   OLLAMA_MODEL=$(grep "^OLLAMA_MODEL=" .env 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
   OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.2}"
+  if ! pgrep -x ollama >/dev/null 2>&1; then
+    echo "Starting Ollama..."
+    ollama serve >/dev/null 2>&1 &
+    sleep 2
+  fi
   if ! ollama list 2>/dev/null | grep -q "$OLLAMA_MODEL"; then
     info "Pulling Ollama model: $OLLAMA_MODEL ..."
     ollama pull "$OLLAMA_MODEL"
@@ -68,6 +71,7 @@ fi
 # ── Start API ────────────────────────────────────────────────────────────────
 info "Starting FastAPI backend..."
 cd "$SCRIPT_DIR/apps/api"
+mkdir -p data
 uv sync --quiet
 uv run alembic upgrade head --quiet 2>/dev/null || uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000 --log-level warning &

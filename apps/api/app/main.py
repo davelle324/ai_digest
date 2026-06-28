@@ -15,7 +15,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import get_db, init_db
+from app.db import CATEGORY_LABELS, CATEGORY_ORDER, get_db, init_db
 from app.digest import run_daily_digest, run_weekly_digest
 from app.fetcher import fetch_all_sources
 from app.models import Article, Source, Subscriber
@@ -85,7 +85,14 @@ async def health():
 
 @app.get("/sources", response_model=list[SourceOut])
 async def list_sources(db: Session = Depends(get_db)):
-    return db.query(Source).filter(Source.enabled.is_(True)).all()
+    sources = db.query(Source).filter(Source.enabled.is_(True)).all()
+    key = {c: i for i, c in enumerate(CATEGORY_ORDER)}
+    return sorted(sources, key=lambda s: key.get(s.category or "", 99))
+
+
+@app.get("/sources/categories")
+async def list_categories():
+    return [{"key": k, "label": v} for k, v in CATEGORY_LABELS.items()]
 
 
 # ---------------------------------------------------------------------------
@@ -98,11 +105,14 @@ async def list_articles(
     page: int = 1,
     limit: int = 20,
     source_id: int | None = None,
+    category: str | None = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(Article)
+    query = db.query(Article).join(Article.source)
     if source_id is not None:
         query = query.filter(Article.source_id == source_id)
+    if category is not None:
+        query = query.filter(Source.category == category)
     total = query.count()
     pages = max(1, ceil(total / limit))
     items = (
