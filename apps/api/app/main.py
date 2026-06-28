@@ -6,7 +6,7 @@ from datetime import datetime
 from math import ceil
 
 import resend
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -15,7 +15,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db import CATEGORY_LABELS, CATEGORY_ORDER, get_db, init_db
+from app.db import CATEGORY_LABELS, CATEGORY_ORDER, SessionLocal, get_db, init_db
 from app.digest import run_daily_digest, run_weekly_digest
 from app.fetcher import fetch_all_sources
 from app.models import Article, Source, Subscriber
@@ -206,10 +206,18 @@ async def unsubscribe(token: str, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 
+async def _fetch_in_background():
+    db = SessionLocal()
+    try:
+        await fetch_all_sources(db)
+    finally:
+        db.close()
+
+
 @app.post("/admin/fetch", dependencies=[Depends(require_admin)])
-async def admin_fetch(db: Session = Depends(get_db)):
-    count = await fetch_all_sources(db)
-    return {"new_articles": count}
+async def admin_fetch(background_tasks: BackgroundTasks):
+    background_tasks.add_task(_fetch_in_background)
+    return {"status": "started"}
 
 
 @app.post("/admin/summarize", dependencies=[Depends(require_admin)])

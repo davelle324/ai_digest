@@ -8,10 +8,22 @@ jobs:
   send:
     runs-on: ubuntu-latest
     steps:
+      - name: Wake up API
+        run: |
+          for i in $(seq 1 12); do
+            if curl -sf --max-time 10 ${{ secrets.API_URL }}/health; then
+              echo "API is up"
+              break
+            fi
+            echo "Attempt $i: API not ready, retrying in 15s..."
+            sleep 15
+          done
+
       - name: Send daily digest
         run: |
           curl -X POST ${{ secrets.API_URL }}/admin/digest/daily \
             -H "X-Admin-Key: ${{ secrets.ADMIN_SECRET }}" \
+            --max-time 30 \
             --fail
 
       - name: Send weekly digest (Mondays only)
@@ -20,5 +32,6 @@ jobs:
           if [ "$DAY" = "1" ]; then
             curl -X POST ${{ secrets.API_URL }}/admin/digest/weekly \
               -H "X-Admin-Key: ${{ secrets.ADMIN_SECRET }}" \
+              --max-time 30 \
               --fail
           fi
