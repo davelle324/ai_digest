@@ -37,6 +37,15 @@ class ArticleListOut(BaseModel):
     pages: int
 
 
+class StatsOut(BaseModel):
+    total_articles: int
+    total_sources: int
+    total_subscribers: int
+    articles_per_source: list[dict]
+    articles_per_category: list[dict]
+    articles_per_day: list[dict]
+
+
 class SubscribeIn(BaseModel):
     email: EmailStr
     cadence: Literal["daily", "weekly"]

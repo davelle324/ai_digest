@@ -2,7 +2,7 @@ import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from math import ceil
 
 import resend
@@ -12,6 +12,7 @@ from fastapi.responses import RedirectResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,7 +21,7 @@ from app.digest import run_daily_digest, run_weekly_digest
 from app.fetcher import fetch_all_sources
 from app.models import Article, Source, Subscriber
 from app.scheduler import scheduler, setup_scheduler
-from app.schemas import ArticleListOut, ArticleOut, SourceOut, SubscribeIn, SubscribeOut
+from app.schemas import ArticleListOut, ArticleOut, SourceOut, SubscribeIn, SubscribeOut, StatsOut
 from app.summarizer import summarize
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,7 @@ async def list_articles(
     limit: int = 20,
     source_id: int | None = None,
     category: str | None = None,
+    q: str | None = None,
     db: Session = Depends(get_db),
 ):
     query = db.query(Article).join(Article.source)
@@ -113,6 +115,9 @@ async def list_articles(
         query = query.filter(Article.source_id == source_id)
     if category is not None:
         query = query.filter(Source.category == category)
+    if q:
+        term = f"%{q}%"
+        query = query.filter(Article.title.ilike(term) | Article.excerpt.ilike(term))
     total = query.count()
     pages = max(1, ceil(total / limit))
     items = (
@@ -122,6 +127,56 @@ async def list_articles(
         .all()
     )
     return ArticleListOut(items=items, total=total, page=page, pages=pages)
+
+
+@app.get("/stats", response_model=StatsOut)
+async def get_stats(db: Session = Depends(get_db)):
+    total_articles = db.query(Article).count()
+    total_sources = db.query(Source).filter(Source.enabled.is_(True)).count()
+    total_subscribers = db.query(Subscriber).filter(Subscriber.confirmed.is_(True)).filter(Subscriber.unsubscribed_at.is_(None)).count()
+
+    per_source = (
+        db.query(Source.name, func.count(Article.id).label("count"))
+        .join(Article, Article.source_id == Source.id)
+        .group_by(Source.id)
+        .order_by(func.count(Article.id).desc())
+        .all()
+    )
+
+    per_category = (
+        db.query(Source.category, func.count(Article.id).label("count"))
+        .join(Article, Article.source_id == Source.id)
+        .filter(Source.category.isnot(None))
+        .group_by(Source.category)
+        .all()
+    )
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    daily_rows = (
+        db.query(func.date(Article.fetched_at).label("date"), func.count(Article.id).label("count"))
+        .filter(Article.fetched_at >= cutoff)
+        .group_by(func.date(Article.fetched_at))
+        .all()
+    )
+    daily_map = {str(row.date): row.count for row in daily_rows}
+    per_day = [
+        {"date": str((datetime.now(timezone.utc) - timedelta(days=i)).date()), "count": 0}
+        for i in range(29, -1, -1)
+    ]
+    for entry in per_day:
+        entry["count"] = daily_map.get(entry["date"], 0)
+
+    return StatsOut(
+        total_articles=total_articles,
+        total_sources=total_sources,
+        total_subscribers=total_subscribers,
+        articles_per_source=[{"name": r.name, "count": r.count} for r in per_source],
+        articles_per_category=[
+            {"category": r.category, "label": CATEGORY_LABELS.get(r.category, r.category), "count": r.count}
+            for r in per_category
+        ],
+        articles_per_day=per_day,
+    )
 
 
 @app.get("/articles/{article_id}", response_model=ArticleOut)

@@ -36,11 +36,13 @@ export async function getArticles(
   page = 1,
   limit = 20,
   sourceId?: number,
-  category?: string
+  category?: string,
+  q?: string
 ): Promise<ArticleListResponse> {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) })
   if (sourceId !== undefined) params.set('source_id', String(sourceId))
   if (category !== undefined) params.set('category', category)
+  if (q) params.set('q', q)
   const res = await fetch(`${API_URL}/articles?${params.toString()}`, {
     next: { revalidate: 60 },
   })
@@ -51,6 +53,21 @@ export async function getArticles(
 export async function getCategories(): Promise<Category[]> {
   const res = await fetch(`${API_URL}/sources/categories`, { next: { revalidate: 3600 } })
   if (!res.ok) throw new Error(`Failed to fetch categories: ${res.status}`)
+  return res.json()
+}
+
+export interface Stats {
+  total_articles: number
+  total_sources: number
+  total_subscribers: number
+  articles_per_source: { name: string; count: number }[]
+  articles_per_category: { category: string; label: string; count: number }[]
+  articles_per_day: { date: string; count: number }[]
+}
+
+export async function getStats(): Promise<Stats> {
+  const res = await fetch(`${API_URL}/stats`, { next: { revalidate: 300 } })
+  if (!res.ok) throw new Error(`Failed to fetch stats: ${res.status}`)
   return res.json()
 }
 

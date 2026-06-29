@@ -1,21 +1,24 @@
 import Link from 'next/link'
+import { Suspense } from 'react'
 import NavBar from '@/components/NavBar'
 import ArticleCard from '@/components/ArticleCard'
+import SearchBar from '@/components/SearchBar'
 import { getArticles, getCategories, getSources } from '@/lib/api'
 
 interface HomePageProps {
-  searchParams: { page?: string; source?: string; category?: string }
+  searchParams: { page?: string; source?: string; category?: string; q?: string }
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const page = Math.max(1, parseInt(searchParams.page || '1', 10))
   const sourceId = searchParams.source ? parseInt(searchParams.source, 10) : undefined
   const category = searchParams.category
+  const q = searchParams.q
 
   let data, sources, categories
   try {
     ;[data, sources, categories] = await Promise.all([
-      getArticles(page, 20, sourceId, category),
+      getArticles(page, 20, sourceId, category, q),
       getSources(),
       getCategories(),
     ])
@@ -49,7 +52,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     return `/?${params.toString()}`
   }
 
-  const activeLabel = sourceId
+  const activeLabel = q
+    ? `"${q}"`
+    : sourceId
     ? sources.find((s) => s.id === sourceId)?.name
     : category
     ? categoryMap.get(category)
@@ -59,15 +64,20 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     <div className="min-h-screen flex flex-col">
       <NavBar />
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white">Latest AI/ML News</h1>
-          <p className="mt-1 text-gray-400">
-            {total} articles{activeLabel ? ` · ${activeLabel}` : ''}
-          </p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white">Latest AI/ML News</h1>
+            <p className="mt-1 text-gray-400">
+              {total} articles{activeLabel ? ` · ${activeLabel}` : ''}
+            </p>
+          </div>
+          <Suspense>
+            <SearchBar defaultValue={q} />
+          </Suspense>
         </div>
 
-        {/* Category + source filter panel */}
-        <div className="mb-8 space-y-2">
+        {/* Category + source filter panel — hidden during search */}
+        <div className={`mb-8 space-y-2 ${q ? 'hidden' : ''}`}>
           {/* All */}
           <div className="flex items-center gap-2 flex-wrap">
             <Link

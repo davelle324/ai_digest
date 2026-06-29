@@ -1,17 +1,17 @@
 # AI Digest — Project Handoff
 
-Last updated: 2026-06-27
+Last updated: 2026-06-28
 
-This document captures everything needed to understand, continue, or hand off this project to a new developer or a future AI session.
+This document captures everything needed to understand, continue, or hand off this project to a new developer or future AI session.
 
 ---
 
 ## What This Is
 
 AI Digest is a full-stack web application that:
-1. Automatically fetches AI/ML news from RSS feeds (arXiv, The Batch, Towards Data Science) and HackerNews every 2 hours
+1. Automatically fetches AI/ML news from 15 curated RSS feeds and HackerNews every 2 hours
 2. Optionally summarizes each article using a local Ollama LLM (disabled in cloud, works locally)
-3. Displays all articles on a public Next.js website (no login required)
+3. Displays all articles on a public Next.js website with category and source filtering
 4. Sends daily or weekly email digests to opted-in subscribers via Resend
 5. Uses double opt-in email confirmation and one-click unsubscribe
 
@@ -19,22 +19,29 @@ AI Digest is a full-stack web application that:
 
 ## Current State
 
-The project was built from scratch in a single session. All code is complete and functional. It has not yet been deployed to production — that's the next step.
+The project is **deployed and running** in production.
 
-**What works locally:**
-- FastAPI backend with all routes
-- Next.js frontend (article feed, article detail, subscribe page)
-- RSS + HackerNews fetching
-- Ollama summarization (if Ollama is running locally)
-- APScheduler for automatic fetching and digest sending
-- Resend email (if API key configured)
-- Docker Compose setup
+| Service | Platform | URL |
+|---|---|---|
+| Frontend | Vercel | Vercel auto-assigns a `.vercel.app` domain |
+| Backend API | Render (Web Service, free tier) | Render auto-assigns an `.onrender.com` domain |
+| Database | User-managed (SQLite locally, Neon in cloud) | — |
 
-**What's ready for cloud deploy:**
-- `render.yaml` for Render.com backend deployment
-- `vercel.json` for Vercel frontend deployment
-- GitHub Actions workflows for scheduled fetch + digest triggers
-- `SUMMARIZER_ENABLED` env var flag to disable Ollama on cloud
+**Deployment notes:**
+- Render was set up via **New → Web Service** (not Blueprint). `render.yaml` exists but is not used by Render — it's documentation/future reference only.
+- Vercel Root Directory must be set to `apps/web` in the Vercel dashboard (project → Settings → General → Root Directory). The `apps/web/vercel.json` holds the framework config.
+- GitHub Actions secrets `API_URL` and `ADMIN_SECRET` must be set for scheduled jobs to work.
+
+**What's working:**
+- Article fetching from all 15 sources every 2 hours (via GitHub Actions cron)
+- Category and source filtering on the frontend
+- Subscribe/confirm/unsubscribe flow
+- Daily + weekly digest emails via Resend + GitHub Actions
+- GitHub Actions health-check retry (handles Render cold starts)
+- HTML stripping from RSS excerpts (both at fetch time and on display)
+
+**Known outstanding issue:**
+- Subscribe form may fail with "failed to fetch" if `NEXT_PUBLIC_API_URL` is not set in Vercel or if `CORS_ORIGINS` on Render doesn't include the Vercel domain. Both must match.
 
 ---
 
@@ -42,17 +49,14 @@ The project was built from scratch in a single session. All code is complete and
 
 ```
 GitHub repo
-  ├── Vercel           → Next.js frontend (public, SSR)
-  └── Render           → FastAPI backend (API + scheduler)
-        └── Neon       → PostgreSQL database (persistent)
+  ├── Vercel           → Next.js frontend (public, SSR, Root Directory: apps/web)
+  └── Render           → FastAPI backend (API + in-process scheduler)
+        └── Database   → SQLite locally / Neon PostgreSQL in cloud
 
 GitHub Actions cron
-  ├── Every 2h         → POST /admin/fetch
-  ├── Daily 08:00 UTC  → POST /admin/digest/daily
-  └── Mon 08:00 UTC    → POST /admin/digest/weekly
-
-Local dev only:
-  └── Ollama           → Local LLM summarization
+  ├── Every 2h         → wake API (/health retry) → POST /admin/fetch
+  ├── Daily 08:00 UTC  → wake API → POST /admin/digest/daily
+  └── Mon 08:00 UTC    → wake API → POST /admin/digest/weekly
 ```
 
 ---
@@ -61,15 +65,15 @@ Local dev only:
 
 | Layer | Technology |
 |---|---|
-| Backend | FastAPI 0.111+, Uvicorn, Python 3.11+, uv |
-| Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS |
-| Database (local/dev) | SQLite via SQLAlchemy 2.0 + Alembic |
-| Database (cloud) | Neon (serverless PostgreSQL) |
+| Backend | FastAPI 0.111+, Uvicorn, Python 3.13, uv |
+| Frontend | Next.js 14.2 App Router, TypeScript, Tailwind CSS |
+| Database (local) | SQLite via SQLAlchemy 2.0 + Alembic |
+| Database (cloud) | Neon (serverless PostgreSQL) recommended |
 | News fetching | feedparser (RSS), httpx (HackerNews API) |
 | AI summaries | Ollama (local only), disabled in cloud |
 | Email | Resend Python SDK |
 | Scheduler | APScheduler (in-process) + GitHub Actions cron (cloud) |
-| Security | slowapi rate limiting, X-Admin-Key header, html.escape for email XSS prevention |
+| Security | slowapi rate limiting, X-Admin-Key header, html.escape for email XSS |
 | Containers | Docker Compose (local dev) |
 
 ---
@@ -83,55 +87,57 @@ ai_digest/
 │   │   ├── app/
 │   │   │   ├── main.py         Routes, CORS, rate limiting, lifespan startup
 │   │   │   ├── models.py       SQLAlchemy models: Source, Article, Subscriber, DigestLog
-│   │   │   ├── schemas.py      Pydantic v2 request/response schemas
-│   │   │   ├── db.py           DB engine, get_db dependency, init_db() with source seeding
-│   │   │   ├── fetcher.py      RSS (feedparser) + HackerNews fetcher with deduplication
+│   │   │   ├── schemas.py      Pydantic v2 schemas (SourceOut includes category)
+│   │   │   ├── db.py           DB engine, DEFAULT_SOURCES (15 sources w/ categories),
+│   │   │   │                   CATEGORY_LABELS, CATEGORY_ORDER, init_db()
+│   │   │   ├── fetcher.py      RSS (feedparser) + HackerNews fetcher; strips HTML from excerpts
 │   │   │   ├── summarizer.py   Ollama HTTP client; returns "" if SUMMARIZER_ENABLED=false
-│   │   │   ├── digest.py       HTML email builder (html.escape'd), Resend sender, digest runners
-│   │   │   └── scheduler.py    APScheduler jobs: fetch/2h, summarize/30min, digests
-│   │   ├── alembic/            DB migrations (run: uv run alembic upgrade head)
-│   │   ├── pyproject.toml      uv project: fastapi, sqlalchemy, feedparser, httpx, apscheduler,
-│   │   │                       resend, slowapi, psycopg2-binary, pydantic[email]
-│   │   └── .env.example
+│   │   │   ├── digest.py       HTML email builder (html.escape'd), Resend sender
+│   │   │   └── scheduler.py    APScheduler: fetch/2h, summarize/30min, digests
+│   │   ├── alembic/
+│   │   │   └── versions/
+│   │   │       └── 0001_add_source_category.py  Adds category column (idempotent)
+│   │   ├── tests/              65 tests, all passing, no warnings
+│   │   └── pyproject.toml      dependency-groups.dev (not tool.uv.dev-dependencies)
 │   └── web/
 │       ├── app/
-│       │   ├── page.tsx              Home feed (SSR, revalidate 60s, paginated)
-│       │   ├── article/[id]/page.tsx Article detail (SSR)
+│       │   ├── page.tsx              Home feed: category + source filter panel, paginated grid
+│       │   ├── article/[id]/page.tsx Article detail with HTML-stripped summary/excerpt
 │       │   └── subscribe/page.tsx    Subscribe form shell
 │       ├── components/
-│       │   ├── NavBar.tsx            Server component, no auth
-│       │   ├── ArticleCard.tsx       Title, source, date, excerpt, "Read more" link
-│       │   └── SubscribeForm.tsx     Client component, calls POST /subscribe
-│       ├── lib/api.ts                Typed fetch helpers (getArticles, getArticle, etc.)
-│       └── package.json              Next.js 14.2, React 18, Tailwind 3.4
+│       │   ├── NavBar.tsx
+│       │   ├── ArticleCard.tsx       Strips HTML from excerpt/summary before display
+│       │   └── SubscribeForm.tsx     Client component → POST /subscribe
+│       ├── lib/api.ts                getArticles(page, limit, sourceId, category),
+│       │                             getSources(), getCategories()
+│       ├── next.config.mjs           (not .ts — older Next.js version)
+│       └── vercel.json               {"framework": "nextjs"}
 ├── .github/workflows/
-│   ├── scheduled_fetch.yml     Cron: every 2h → POST /admin/fetch (needs API_URL, ADMIN_SECRET secrets)
-│   └── scheduled_digest.yml    Cron: 08:00 UTC → daily; Mon only → weekly
-├── docker-compose.yml          Services: api (8000), web (3000), ollama (internal only)
-├── render.yaml                 Render.com IaC config (reads render.yaml on Blueprint deploy)
-├── vercel.json                 Vercel project config (points at apps/web)
-├── .env.example                Root env template (covers both api and web vars)
-└── HANDOFF.md                  This file
+│   ├── scheduled_fetch.yml     Cron every 2h: health retry → POST /admin/fetch
+│   └── scheduled_digest.yml    Cron 08:00 UTC: health retry → daily/weekly digest
+├── docker-compose.yml
+├── render.yaml                 Reference only — Render was set up manually
+├── run-local.sh                Recommended local dev entrypoint (sources .env, starts both services)
+└── .env.example                Single root env file covers all variables
 ```
 
 ---
 
 ## Environment Variables
 
-| Variable | Where set | Description |
+| Variable | Where needed | Description |
 |---|---|---|
-| `DATABASE_URL` | API | `sqlite:///./data/digest.db` locally; Neon connection string in cloud |
-| `OLLAMA_URL` | API | `http://localhost:11434` locally; not needed in cloud |
-| `OLLAMA_MODEL` | API | `llama3.2` — any Ollama-compatible model |
-| `SUMMARIZER_ENABLED` | API | `true` locally, `false` in cloud |
-| `RESEND_API_KEY` | API | From resend.com — needed for email sending |
-| `RESEND_FROM` | API | Sender email (must be a verified domain on Resend) |
-| `SITE_URL` | API | Frontend URL — used in confirmation/unsubscribe links |
-| `CORS_ORIGINS` | API | Comma-separated list of allowed frontend origins |
-| `ADMIN_SECRET` | API | Shared secret for X-Admin-Key header on /admin/* endpoints |
-| `NEXT_PUBLIC_API_URL` | Web | Backend API base URL (must be set at build time for Vercel) |
-| `API_URL` | GitHub Secrets | Render service URL for cron jobs |
-| `ADMIN_SECRET` | GitHub Secrets | Same value as backend ADMIN_SECRET |
+| `DATABASE_URL` | Render | `sqlite:///./data/digest.db` locally; Neon URL in cloud |
+| `OLLAMA_URL` | Render/local | `http://localhost:11434` locally; unused in cloud |
+| `OLLAMA_MODEL` | Render/local | `llama3.2` default |
+| `SUMMARIZER_ENABLED` | Render | Set `false` in cloud (no GPU) |
+| `RESEND_API_KEY` | Render | From resend.com |
+| `RESEND_FROM` | Render | Verified sender address |
+| `SITE_URL` | Render | Vercel frontend URL (for confirmation/unsubscribe links in emails) |
+| `CORS_ORIGINS` | Render | Must include the Vercel URL e.g. `https://your-app.vercel.app` |
+| `ADMIN_SECRET` | Render + GitHub Secrets | Secret for X-Admin-Key on /admin/* endpoints |
+| `NEXT_PUBLIC_API_URL` | Vercel | Render service URL — **baked in at build time**, redeploy after changing |
+| `API_URL` | GitHub Secrets | Render service URL for Actions cron |
 
 ---
 
@@ -139,136 +145,96 @@ ai_digest/
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/health` | None | Returns `{"status":"ok"}` |
-| GET | `/sources` | None | List enabled news sources |
-| GET | `/articles` | None | Paginated articles (`?page=1&limit=20&source_id=`) |
+| GET | `/health` | None | `{"status":"ok"}` |
+| GET | `/sources` | None | List enabled sources sorted by category order |
+| GET | `/sources/categories` | None | List category keys and display labels |
+| GET | `/articles` | None | Paginated (`?page&limit&source_id&category`) |
 | GET | `/articles/{id}` | None | Single article detail |
 | POST | `/subscribe` | None | Create subscription (rate-limited 5/min per IP) |
 | GET | `/confirm/{token}` | Token | Confirm subscription, redirect to frontend |
 | GET | `/unsubscribe/{token}` | Token | Unsubscribe |
-| POST | `/admin/fetch` | X-Admin-Key | Trigger news fetch |
+| POST | `/admin/fetch` | X-Admin-Key | Kick off background fetch (returns immediately) |
 | POST | `/admin/summarize` | X-Admin-Key | Summarize up to 20 pending articles |
 | POST | `/admin/digest/daily` | X-Admin-Key | Trigger daily digest send |
 | POST | `/admin/digest/weekly` | X-Admin-Key | Trigger weekly digest send |
 
 ---
 
-## Default News Sources (seeded automatically)
+## News Sources (15 total, seeded automatically)
 
-| Name | Type |
-|---|---|
-| arXiv cs.AI | RSS |
-| arXiv cs.LG | RSS |
-| The Batch (deeplearning.ai) | RSS |
-| Towards Data Science | RSS |
-| HackerNews AI | HN API (keyword-filtered) |
+| Category | Name | Type |
+|---|---|---|
+| 🔥 Top Stories | OpenAI Blog | RSS |
+| 🔥 Top Stories | Anthropic | RSS |
+| 🔥 Top Stories | Google AI | RSS |
+| 🔥 Top Stories | TechCrunch AI | RSS |
+| 🔥 Top Stories | The Batch (DeepLearning.AI) | RSS |
+| 🧠 Research | arXiv cs.AI | RSS |
+| 🧠 Research | arXiv cs.LG | RSS |
+| 🧠 Research | arXiv cs.CL | RSS |
+| 💻 Open Source | Hugging Face | RSS |
+| 💻 Open Source | Towards Data Science | RSS |
+| 🏢 Company Releases | NVIDIA Blog | RSS |
+| 🏢 Company Releases | Meta AI | RSS |
+| 👥 Community Buzz | HackerNews AI | HN API (keyword-filtered) |
+| 👥 Community Buzz | Reddit r/MachineLearning | RSS |
+| 👥 Community Buzz | Reddit r/LocalLLaMA | RSS |
 
-HackerNews keywords: `ai`, `ml`, `llm`, `gpt`, `machine learning`, `neural`, `deep learning`, `transformer`, `openai`, `anthropic`, `gemini`, `mistral`, `ollama`, `hugging face`, `langchain`, `rag`, `fine-tun`
-
----
-
-## Cloud Deployment Steps (not done yet)
-
-### Prerequisites
-- GitHub repo pushed: `git push origin main`
-- Resend account with verified domain/email
-- Render account
-- Neon account
-- Vercel account
-
-### Order of operations
-1. **Neon**: Create project `ai-digest` → copy connection string
-2. **Render**: New → Blueprint → connect repo → Render reads `render.yaml` → deploys API
-   - Set env vars manually in Render dashboard (DATABASE_URL, SITE_URL, CORS_ORIGINS, RESEND_*)
-   - Copy the Render service URL
-3. **Vercel**: Import repo → Vercel reads `vercel.json` → set `NEXT_PUBLIC_API_URL` → deploy
-   - Copy the Vercel URL
-   - Go back to Render → set SITE_URL and CORS_ORIGINS to the Vercel URL → redeploy
-4. **GitHub Secrets**: Settings → Secrets → Actions → add `API_URL` and `ADMIN_SECRET`
-5. **Verify**: `curl https://your-render-url.onrender.com/health`
-6. **First fetch**: `curl -X POST .../admin/fetch -H "X-Admin-Key: your-secret"`
+To add a source: add an entry to `DEFAULT_SOURCES` in `apps/api/app/db.py` with a `category` field matching one of the keys in `CATEGORY_LABELS`.
 
 ---
 
-## Known Limitations
-
-1. **Render free tier sleeps** after 15 min of no traffic. GitHub Actions cron wakes it for scheduled jobs, but if someone subscribes at an odd time and the server is asleep, the first request takes ~30s to wake.
-2. **No summaries in cloud** — Ollama needs GPU/high RAM. Articles show the first ~500 chars as excerpt instead.
-3. **Neon free tier**: 0.5 GB storage, 190 compute hours/month. For an AI news digest this should be fine for months.
-4. **APScheduler is in-process**: If the Render service is restarted, the scheduler restarts too. For critical jobs, GitHub Actions is the backup. Don't run multiple Render instances (scheduler would run N times).
-5. **SQLite on local**: Data stored in `apps/api/data/digest.db`. Not tracked in git.
-6. **No admin UI**: Managing sources, viewing digest logs, or forcing specific article re-summarization requires direct DB access or curl commands.
-7. **HackerNews keyword filter**: Very broad — will catch some non-AI stories. Could be refined.
-
----
-
-## Security Notes
-
-- Admin endpoints require `X-Admin-Key: {ADMIN_SECRET}` header
-- Email HTML is escaped with `html.escape()` to prevent XSS from malicious RSS feeds
-- Subscribe endpoint is rate-limited (5/minute per IP via slowapi)
-- Subscriber emails are masked in logs (`jo***@example.com`)
-- Ollama port is NOT exposed to host in Docker Compose (internal network only)
-- All secrets are env vars only — nothing hardcoded
-
----
-
-## Future Ideas / Roadmap
-
-### Near-term
-- [ ] **Admin UI** — simple password-protected dashboard to manage sources, view subscriber counts, see digest logs, force re-fetch
-- [ ] **More news sources** — MIT News, Google AI Blog, Hugging Face blog, AI Alignment Forum RSS
-- [ ] **Category tagging** — tag articles by topic (LLMs, computer vision, RL, safety, etc.) and let subscribers filter
-- [ ] **Claude API summarization** — instead of/alongside Ollama; enables summaries in cloud without GPU
-
-### Medium-term
-- [ ] **Search** — full-text search across article titles and summaries (SQLite FTS5 or Postgres pg_tsvector)
-- [ ] **Subscriber preferences** — let users choose topic categories for their digest
-- [ ] **Digest preview** — web page at `/digest/preview` showing what today's digest would look like
-- [ ] **Click tracking** — track which articles subscribers click in emails (optional analytics)
-- [ ] **Unsubscribe reason** — ask why they unsubscribed (optional one-question survey)
-
-### Long-term
-- [ ] **Multiple digest templates** — newsletter-style, plain text, ultra-brief (titles only)
-- [ ] **Social sharing** — share button on article pages
-- [ ] **RSS output** — expose a `/feed.xml` so the digest itself can be subscribed to via any RSS reader
-- [ ] **AI-generated digest intro** — a 2-3 sentence "this week in AI" lede written by Claude
-
----
-
-## Running Locally (Quick Reference)
+## Running Locally
 
 ```bash
-# Backend
-cd apps/api
-cp .env.example .env          # fill in RESEND_API_KEY, ADMIN_SECRET
-uv sync
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
+# One command starts everything
+./run-local.sh
+```
 
-# Frontend (separate terminal)
-cd apps/web
-npm install
-npm run dev
+This script: checks prerequisites, exports all `.env` vars to child processes, creates the data dir, runs Alembic migrations, starts FastAPI on :8000, starts Next.js on :3000.
 
-# Pull Ollama model (separate terminal, if you want summaries)
-ollama pull llama3.2
-
-# Trigger first fetch
+To trigger a manual fetch:
+```bash
 curl -X POST http://localhost:8000/admin/fetch \
   -H "X-Admin-Key: your-admin-secret"
 ```
 
 ---
 
+## Known Limitations
+
+1. **Render free tier sleeps** after 15 min of inactivity. GitHub Actions wakes it for scheduled jobs (health retry loop), but ad-hoc requests may hit a ~30s cold start.
+2. **No summaries in cloud** — Ollama needs GPU/high RAM. Articles show excerpts only in cloud.
+3. **APScheduler is in-process** — if Render restarts, the scheduler restarts. GitHub Actions is the reliable backup for scheduled work.
+4. **Render set up manually** — `render.yaml` exists but Render won't read it unless the service is deleted and recreated via Blueprint.
+5. **No admin UI** — managing sources or viewing digest logs requires direct DB access or curl.
+6. **HackerNews keyword filter** — broad, catches some non-AI stories.
+
+---
+
+## Suggested Next Steps
+
+### Immediate (deployment health)
+- Verify `CORS_ORIGINS` on Render includes the Vercel URL — fixes subscribe form
+- Verify `NEXT_PUBLIC_API_URL` is set in Vercel and the app was redeployed after setting it
+- Confirm GitHub Actions secrets `API_URL` and `ADMIN_SECRET` are set and Actions are running
+
+### Near-term features
+- **Claude API summarization** — replace/supplement Ollama with the Anthropic API; enables summaries in cloud without GPU
+- **Admin UI** — simple password-protected dashboard to manage sources, view subscriber counts, force re-fetch
+- **RSS output** — expose `/feed.xml` so the digest can be subscribed to via any RSS reader
+
+### Medium-term
+- **Search** — full-text search across titles and summaries (SQLite FTS5 or Postgres `pg_tsvector`)
+- **Subscriber topic preferences** — let users pick categories for their digest
+- **Digest preview page** — web page showing what today's digest would look like
+
+---
+
 ## Picking Up This Project
 
-If you're a future developer (or AI session) picking this up:
-
-1. Read this file first
-2. Read `README.md` for usage instructions
-3. The code is complete — the main outstanding task is **deploying to cloud** (steps in the Cloud Deployment section above)
-4. Key files to understand: `apps/api/app/main.py` (routes), `apps/api/app/fetcher.py` (how articles are collected), `apps/api/app/digest.py` (how emails are sent)
-5. The `.env.example` at the root covers all required variables
-6. To add a news source: edit `DEFAULT_SOURCES` in `apps/api/app/db.py`
-7. To test email sending locally: set `RESEND_API_KEY` and call `POST /admin/digest/daily`
+1. Read this file
+2. Read `README.md` for usage
+3. Run `./run-local.sh` to start locally
+4. Key files: `apps/api/app/main.py` (routes), `apps/api/app/fetcher.py` (collection), `apps/api/app/db.py` (sources + categories), `apps/api/app/digest.py` (email)
+5. Tests: `cd apps/api && uv run pytest` — 65 tests, all pass

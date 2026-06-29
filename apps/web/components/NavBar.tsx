@@ -11,13 +11,21 @@ export default function NavBar() {
           >
             AI Digest
           </Link>
-          <Link
-            href="/subscribe"
-            className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium
-                       bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
-          >
-            Subscribe
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/stats"
+              className="text-sm font-medium text-gray-400 hover:text-white transition-colors"
+            >
+              Stats
+            </Link>
+            <Link
+              href="/subscribe"
+              className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium
+                         bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
+            >
+              Subscribe
+            </Link>
+          </div>
         </div>
       </div>
     </nav>
